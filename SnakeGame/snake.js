@@ -22,9 +22,30 @@ const levelCompleteModalElement = document.getElementById("levelCompleteModal");
 const gameOverModal = new bootstrap.Modal(gameOverModalElement);
 const levelCompleteModal = new bootstrap.Modal(levelCompleteModalElement);
 
+//LEVEL 2
+const currentLevel = Number(levelElement?.textContent) || 1;
+
+const LEVEL_CONFIGS = {
+    1: {
+        targetScore: 100,
+        speed: 180,
+        getWalls: () => []
+    },
+    2: {
+        targetScore: 200,
+        speed: 160,
+        getWalls: () => generateRandomWallCluster(8, 5)
+
+    }
+}
+
+const currentConfig = LEVEL_CONFIGS[currentLevel] || LEVEL_CONFIGS[1];
+
+
 // Game state
 let snake = [];
 let food = {x: 10, y: 10};
+let currentWalls = [];
 
 let direction = "RIGHT";
 let nextDirection = "RIGHT";
@@ -35,33 +56,46 @@ let gamePaused = false;
 let gameLoop = null;
 
 // Random vị trí rắn xuất hiện
-function generateRandomSnake() {
+function generateRandomSnake(walls) {
     const directions = ["UP", "DOWN", "LEFT", "RIGHT"];
-    const randomDir = directions[Math.floor(Math.random() * directions.length)];
-    direction = randomDir;
-    nextDirection = randomDir;
-
     const margin = 4;
-    const headX = Math.floor(Math.random() * (COLS - margin * 2)) + margin;
-    const headY = Math.floor(Math.random() * (ROWS - margin * 2)) + margin;
-
-    const newSnake = [{ x: headX, y: headY }];
     const SNAKE_INITIAL_LENGTH = 3;
 
+    let isSafe = false;
+    let newSnake = [];
+    let randomDir = "RIGHT";
 
-    for (let i = 1; i < SNAKE_INITIAL_LENGTH; i++) {
-        let segmentX = headX;
-        let segmentY = headY;
+    while (!isSafe) {
+        randomDir = directions[Math.floor(Math.random() * directions.length)];
+        const headX = Math.floor(Math.random() * (COLS - margin * 2)) + margin;
+        const headY = Math.floor(Math.random() * (ROWS - margin * 2)) + margin;
 
-        switch (direction) {
-            case "RIGHT": segmentX = headX - i; break;
-            case "LEFT":  segmentX = headX + i; break;
-            case "UP":    segmentY = headY + i; break;
-            case "DOWN":  segmentY = headY - i; break;
+        newSnake = [{x: headX, y: headY}];
+
+
+        for (let i = 1; i < SNAKE_INITIAL_LENGTH; i++) {
+            let segmentX = headX;
+            let segmentY = headY;
+
+            switch (randomDir) {
+                case "RIGHT": segmentX = headX - i; break;
+                case "LEFT":  segmentX = headX + i; break;
+                case "UP":    segmentY = headY + i; break;
+                case "DOWN":  segmentY = headY - i; break;
         }
 
-        newSnake.push({ x: segmentX, y: segmentY });
+            newSnake.push({ x: segmentX, y: segmentY });
     }
+        const isCollideWithWall = newSnake.some(segment =>
+                walls.some(wall => wall.x === segment.x && wall.y === segment.y)
+    );
+
+        if (!isCollideWithWall) {
+            isSafe = true;
+        }
+    }
+    direction = randomDir;
+    nextDirection = randomDir;
     return newSnake;
 }
 
@@ -74,24 +108,28 @@ function startGame() {
         gameLoop = null;
     }
 
-    snake = generateRandomSnake();
+    currentWalls = currentConfig.getWalls ? currentConfig.getWalls() : [];
+
+    snake = generateRandomSnake(currentWalls);
     createFood();
     score = 0;
     gameRunning = true;
     gamePaused = false;
 
-    levelElement.textContent = "1";
-    targetElement.textContent = TARGET_SCORE;
+    levelElement.textContent = currentLevel;
+    targetElement.textContent = currentConfig.targetScore;
     gameStatusElement.textContent = "PLAYING";
     pauseButton.innerHTML = '<i class="fa-solid fa-pause"></i> PAUSE';
     gameArea.innerHTML = "";
+
+    renderWalls();
     renderSnake();
     renderFood();
     updateUI();
 
     gameLoop = setInterval(
         updateGame,
-        GAME_SPEED
+        currentConfig.speed
     );
 }
 
@@ -140,6 +178,12 @@ function updateGame() {
         return;
     }
 
+    const hitWall = currentWalls.some(wall => wall.x === head.x && wall.y === head.y);
+    if (hitWall) {
+        gameOver();
+        return;
+    }
+
     const ateFood = head.x === food.x && head.y === food.y;
 
     const bodyToCheck = ateFood ? snake : snake.slice(0, -1);
@@ -157,7 +201,7 @@ function updateGame() {
     if (ateFood) {
         score += FOOD_SCORE;
 
-        if (score >= TARGET_SCORE) {
+        if (score >= currentConfig.targetScore) {
             updateUI();
             renderSnake();
             levelComplete();
@@ -186,14 +230,68 @@ function createFood() {
 
         };
 
-        positionIsValid = !snake.some(
-            segment =>
-                segment.x === newFood.x &&
-                segment.y === newFood.y
+        const onSnake = snake.some(
+            segment => segment.x === newFood.x && segment.y === newFood.y
         );
+
+
+        const onWall = currentWalls.some(
+            wall => wall.x === newFood.x && wall.y === newFood.y
+        );
+
+
+        positionIsValid = !onSnake && !onWall;
     }
 
     food = newFood;
+}
+
+function renderWalls() {
+    currentWalls.forEach((wall) => {
+        const wallElement = document.createElement("div");
+        wallElement.classList.add("wall");
+        wallElement.style.left = `${(wall.x / COLS) * 100}%`;
+        wallElement.style.top = `${(wall.y / ROWS) * 100}%`;
+        gameArea.appendChild(wallElement);
+    });
+}
+
+
+function generateRandomWallCluster(numClusters, clusterLength) {
+    const walls = [];
+    for (let i = 0; i < numClusters; i++) {
+        let validCluster = false;
+        let attemps = 0;
+
+        while (!validCluster && attemps < 50) {
+            attemps ++;
+            const startX = Math.floor(Math.random() * (COLS - 8)) + 4;
+            const startY = Math.floor(Math.random() * (ROWS - 8)) + 4;
+            const isHorizontal = Math.random() > 0.5;
+
+            const tempCluster = [];
+            let overlap = false;
+
+            for (let j = 0; j < clusterLength; j++) {
+                const wallX = isHorizontal ? startX + j : startX;
+                const wallY = isHorizontal ? startY : startY + j;
+
+                const isNearCenter = wallX >= 9 && wallX <= 15 && wallY >= 9 && wallY <= 15;
+                const isDuplicate = walls.some(w => w.x === wallX && w.y === wallY);
+
+                if (isNearCenter || isDuplicate) {
+                    overlap = true;
+                    break;
+                }
+                tempCluster.push({x: wallX, y: wallY});
+            }
+            if (!overlap) {
+                walls.push(...tempCluster);
+                validCluster = true;
+            }
+        }
+    }
+    return walls;
 }
 
 function renderSnake() {
@@ -310,10 +408,11 @@ function updateUI() {
 }
 
 function updateHighScore() {
-    const highScore = Number(localStorage.getItem("snakeHighScore") || 0);
+    const storageKey = `snakeHighScore_Level_${currentLevel}`;
+    const highScore = Number(localStorage.getItem(storageKey) || 0);
 
     if (score > highScore) {
-        localStorage.setItem("snakeHighScore", score);
+        localStorage.setItem(storageKey, score);
     }
 
     highScoreElement.textContent = Math.max(score, highScore);
@@ -458,11 +557,13 @@ settingButton.addEventListener(
     "click",
     function () {
 
+        const hasWalls = currentConfig.getWalls && currentConfig.getWalls.length > 0;
         alert(
-            "Level 1\n\n" +
-            "Use Arrow Keys to control the snake.\n" +
-            "Eat food to increase your score.\n" +
-            "Reach 100 points to complete Level 1."
+            `Hướng dẫn - Level ${currentLevel}\n\n` +
+            "Dùng các phím mũi tên để điều khiển rắn.\n" +
+            "Ăn mồi để tích lũy điểm.\n" +
+            (hasWalls ? "Tránh đụng vào các bức tường trên màn chơi.\n" : "") +
+            `Đạt ${currentConfig.targetScore} điểm để hoàn thành màn chơi!`
         );
     }
 );
