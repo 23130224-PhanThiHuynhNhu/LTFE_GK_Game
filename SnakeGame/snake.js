@@ -22,7 +22,6 @@ const levelCompleteModalElement = document.getElementById("levelCompleteModal");
 const gameOverModal = new bootstrap.Modal(gameOverModalElement);
 const levelCompleteModal = new bootstrap.Modal(levelCompleteModalElement);
 
-//LEVEL 2
 const currentLevel = Number(levelElement?.textContent) || 1;
 
 const LEVEL_CONFIGS = {
@@ -36,6 +35,12 @@ const LEVEL_CONFIGS = {
         speed: 160,
         getWalls: () => generateRandomWallCluster(8, 5)
 
+    },
+    3: {
+        targetScore: 300,
+        speed: 150,
+        isMovingWalls: true,
+        getWalls: () => generateMovingWallCluster(4, 3)
     }
 }
 
@@ -110,7 +115,22 @@ function startGame() {
 
     currentWalls = currentConfig.getWalls ? currentConfig.getWalls() : [];
 
-    snake = generateRandomSnake(currentWalls);
+    if (currentConfig.isMovingWalls) {
+        const clusters = currentConfig.getWalls();
+        currentWalls = {
+            clusters: clusters,
+            allBlocks: clusters.flatMap(c => c.blocks)
+        };
+    }else {
+        const staticWalls = currentConfig.getWalls() ? currentConfig.getWalls() : [];
+        currentWalls = {
+            clusters: [],
+            allBlocks: staticWalls
+        };
+    }
+
+
+    snake = generateRandomSnake(currentWalls.allBlocks);
     createFood();
     score = 0;
     gameRunning = true;
@@ -139,6 +159,7 @@ function updateGame() {
         return;
     }
 
+    moveWalls();
     direction = nextDirection;
 
     // Tạo đầu mới
@@ -178,7 +199,7 @@ function updateGame() {
         return;
     }
 
-    const hitWall = currentWalls.some(wall => wall.x === head.x && wall.y === head.y);
+    const hitWall = currentWalls.allBlocks.some(wall => wall.x === head.x && wall.y === head.y);
     if (hitWall) {
         gameOver();
         return;
@@ -235,7 +256,7 @@ function createFood() {
         );
 
 
-        const onWall = currentWalls.some(
+        const onWall = currentWalls.allBlocks.some(
             wall => wall.x === newFood.x && wall.y === newFood.y
         );
 
@@ -247,7 +268,10 @@ function createFood() {
 }
 
 function renderWalls() {
-    currentWalls.forEach((wall) => {
+    const oldWalls = gameArea.querySelectorAll(".wall");
+    oldWalls.forEach((el) => el.remove());
+
+    currentWalls.allBlocks.forEach((wall) => {
         const wallElement = document.createElement("div");
         wallElement.classList.add("wall");
         wallElement.style.left = `${(wall.x / COLS) * 100}%`;
@@ -292,6 +316,101 @@ function generateRandomWallCluster(numClusters, clusterLength) {
         }
     }
     return walls;
+}
+
+//Level 3
+function generateMovingWallCluster(numClusters, clusterLength) {
+    const wallClusters = [];
+    for (let i = 0; i < numClusters; i++) {
+        const isHorizontal = i % 2 === 0;
+
+        if (isHorizontal) {
+            const y = 5 + i * 6;
+            const minX = 2;
+            const maxX = COLS - 3;
+            const startX = Math.floor(Math.random() * (maxX - minX - clusterLength)) + minX;
+
+            const blocks = [];
+            for (let j = 0; j < clusterLength; j++) {
+                blocks.push({x: startX + j, y: y});
+            }
+            wallClusters.push({
+                blocks: blocks,
+                type: "HORIZONTAL",
+                direction: Math.random() > 0.5 ? 1 : -1,
+                min: minX,
+                max: maxX
+            });
+        } else {
+            const x = 5 + i * 6;
+            const minY = 2;
+            const maxY = ROWS - 3;
+            const startY = Math.floor(Math.random() * (maxY - minY - clusterLength)) + minY;
+            const blocks = [];
+            for (let j = 0; j < clusterLength; j++) {
+                blocks.push({x: x, y: startY + j});
+            }
+            wallClusters.push({
+                blocks: blocks,
+                type: "VERTICAL",
+                direction: Math.random() > 0.5 ? 1 : -1,
+                min: minY,
+                max: maxY,
+            })
+        }
+    }
+    return wallClusters;
+}
+
+//cap nhat vi tri tuong
+let wallMoveCounter = 0;
+function moveWalls() {
+    if (!currentConfig.isMovingWalls || !currentWalls.clusters)
+        return;
+
+    wallMoveCounter ++;
+    if (wallMoveCounter % 2 !== 0)
+        return;
+
+    currentWalls.clusters.forEach(cluster => {
+        let canMove = true;
+
+        const newBlocks = cluster.blocks.map(b => {
+            if (cluster.type === "HORIZONTAL") {
+                return {x: b.x + cluster.direction, y: b.y };
+            } else {
+                return {x: b.x, y: b.y + cluster.direction};
+            }
+        });
+
+        const headBlock = newBlocks[0];
+        const tailBlock = newBlocks[newBlocks.length - 1];
+        if (cluster.type === "HORIZONTAL") {
+            if (headBlock.x < cluster.min || tailBlock.x > cluster.max) {
+                cluster.direction *= -1;
+                canMove = false;
+            }
+        }else {
+            if (headBlock.y < cluster.min || tailBlock.y > cluster.max) {
+                cluster.direction *= -1;
+                canMove = false;
+            }
+        }
+
+        if (canMove) {
+            cluster.blocks = newBlocks;
+        }
+    });
+    currentWalls.allBlocks = currentWalls.clusters.flatMap(c => c.blocks);
+
+    const wallHitSnake = currentWalls.allBlocks.some(wall =>
+        snake.some(segment => segment.x === wall.x && segment.y === wall.y));
+    if (wallHitSnake) {
+        gameOver();
+        return;
+    }
+
+    renderWalls();
 }
 
 function renderSnake() {
@@ -557,7 +676,7 @@ settingButton.addEventListener(
     "click",
     function () {
 
-        const hasWalls = currentConfig.getWalls && currentConfig.getWalls.length > 0;
+        const hasWalls = currentWalls.allBlocks && currentWalls.allBlocks.length > 0;
         alert(
             `Hướng dẫn - Level ${currentLevel}\n\n` +
             "Dùng các phím mũi tên để điều khiển rắn.\n" +
