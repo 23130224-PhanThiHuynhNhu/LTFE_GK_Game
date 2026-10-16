@@ -41,6 +41,14 @@ const LEVEL_CONFIGS = {
         speed: 150,
         isMovingWalls: true,
         getWalls: () => generateMovingWallCluster(4, 3)
+    },
+    4: {
+        targetScore: 350,
+        speed: 140,
+        isMovingWalls: true,
+        hasPortals: true,
+        getWalls: () => generateMovingWallCluster(4,  3),
+        getPortals: () => generatePortals()
     }
 }
 
@@ -59,6 +67,7 @@ let score = 0;
 let gameRunning = false;
 let gamePaused = false;
 let gameLoop = null;
+let currentPortals = [];
 
 // Random vị trí rắn xuất hiện
 function generateRandomSnake(walls) {
@@ -129,6 +138,11 @@ function startGame() {
         };
     }
 
+    if (currentConfig.hasPortals) {
+        currentPortals = currentConfig.getPortals();
+    } else {
+        currentPortals = [];
+    }
 
     snake = generateRandomSnake(currentWalls.allBlocks);
     createFood();
@@ -143,6 +157,7 @@ function startGame() {
     gameArea.innerHTML = "";
 
     renderWalls();
+    renderPortals();
     renderSnake();
     renderFood();
     updateUI();
@@ -186,6 +201,22 @@ function updateGame() {
         case "RIGHT":
             head.x++;
             break;
+    }
+
+    //level 4 - kiểm tra chui vào cổng thời không
+    if (currentConfig.hasPortals && currentPortals.length > 0) {
+        currentPortals.forEach(portal => {
+            if (head.x === portal.p1.x && head.y === portal.p1.y) {
+                head.x = portal.p2.x;
+                head.y = portal.p2.y;
+            }
+
+            else if (head.x === portal.p2.x && head.y === portal.p2.y) {
+                head.x = portal.p1.x;
+                head.y = portal.p1.y;
+            }
+        })
+
     }
 
     // Kiểm tra chạm tường
@@ -260,8 +291,12 @@ function createFood() {
             wall => wall.x === newFood.x && wall.y === newFood.y
         );
 
+        //level 4 - mồi không đè lên cổng thời không
+        const onPortal = currentPortals.some(portal =>
+            (portal.p1.x === newFood.x && portal.p1.y === newFood.y) ||
+            (portal.p2.x === newFood.x && portal.p2.y === newFood.y));
 
-        positionIsValid = !onSnake && !onWall;
+        positionIsValid = !onSnake && !onWall && !onPortal;
     }
 
     food = newFood;
@@ -411,6 +446,40 @@ function moveWalls() {
     }
 
     renderWalls();
+}
+
+//level 4
+function generatePortals() {
+    return [
+        {id: 1,
+        color: "blue",
+        p1: {x: 3, y: 3},
+        p2: {x: COLS - 4, y: ROWS - 4}
+        },
+
+        {
+            id: 2,
+            color: "orange",
+            p1: {x: COLS - 4, y: 3},
+            p2: {x: 3, y: ROWS - 4}
+        }
+    ]
+}
+
+// level 4
+function renderPortals() {
+    const oldPortals = gameArea.querySelectorAll(".portal");
+    oldPortals.forEach(el => el.remove());
+
+    currentPortals.forEach(portal => {
+        [portal.p1, portal.p2].forEach(p => {
+            const portalElement = document.createElement("div");
+            portalElement.classList.add("portal", `portal-${portal.color}`);
+            portalElement.style.left = `${(p.x / COLS) * 100}%`;
+            portalElement.style.top = `${(p.y / ROWS) * 100}%`;
+            gameArea.appendChild(portalElement);
+        })
+    })
 }
 
 function renderSnake() {
@@ -676,15 +745,38 @@ settingButton.addEventListener(
     "click",
     function () {
 
-        const hasWalls = currentWalls.allBlocks && currentWalls.allBlocks.length > 0;
+        let levelMechanic = "";
+        switch (currentLevel) {
+            case 1:
+                levelMechanic = "Màn chơi cổ điển: Không có vật cản, tập trung ăn mồi và làm quen điều khiển.\n";
+                break;
+            case 2:
+                levelMechanic = "Tránh đụng vào các bức tường gạch cố định trên bản đồ.\n";
+                break;
+            case 3:
+                levelMechanic = "CẨN THẬN: Các bức tường sẽ liên tục trượt qua lại!\n";
+                break;
+            case 4:
+                levelMechanic = "CỔNG THỜI KHÔNG: Chui vào cổng màu xanh/cam để lập tức dịch chuyển sang cổng cùng màu ở đầu bên kia.\n" +
+                    "Vẫn có tường di chuyển xuất hiện, hãy chú ý quan sát điểm ra trước khi chui cổng!\n";
+                break;
+            case 5:
+                levelMechanic = "";
+                break;
+            default:
+                const hasWalls = currentWalls.allBlocks && currentWalls.allBlocks.length > 0;
+                if (hasWalls)
+                    levelMechanic = "Tránh đụng vào các bức tường.\n";
+                break;
+        }
+
         alert(
-            `Hướng dẫn - Level ${currentLevel}\n\n` +
+            `HƯỚNG DẪN - LEVEL ${currentLevel}\n\n` +
             "Dùng các phím mũi tên để điều khiển rắn.\n" +
-            "Ăn mồi để tích lũy điểm.\n" +
-            (hasWalls ? "Tránh đụng vào các bức tường trên màn chơi.\n" : "") +
-            `Đạt ${currentConfig.targetScore} điểm để hoàn thành màn chơi!`
+            "Ăn mồi để tích lũy điểm (+10 điểm/mồi).\n" +
+            levelMechanic +
+            `MỤC TIÊU: Đạt ${currentConfig.targetScore} điểm để hoàn thành màn chơi!`
         );
-    }
-);
+    });
 
 startGame();

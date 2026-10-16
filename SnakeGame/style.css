@@ -391,4 +391,36 @@ body {
   z-index: 2;
 }
 
+.portal {
+  position: absolute;
+  width: 4.1666666667%;
+  height: 4.1666666667%;
+  border-radius: 50%;
+  z-index: 3;
+  animation: portalPulse 1s infinite alternate;
+}
+
+.portal-blue {
+  background: radial-gradient(circle, #60a5fa, #2563eb);
+  box-shadow: 0 0 10px #3b82f6, 0 0 20px #2563eb;
+  border: 2px solid #93c5fd;
+}
+
+.portal-orange {
+  background: radial-gradient(circle, #fb923c, #ea580c);
+  box-shadow: 0 0 10px #f97316, 0 0 20px #ea580c;
+  border: 2px solid #fdba74;
+}
+
+@keyframes portalPulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
 /*# sourceMappingURL=style.css.map */
